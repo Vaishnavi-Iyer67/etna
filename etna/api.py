@@ -47,19 +47,27 @@ class Model:
         self.preprocessor = Preprocessor(self.task_type)
         self.rust_model = None
 
-    def train(self, epochs=100, lr=0.01):
+    def train(self, epochs=100, lr=0.01, batch_size=None):
+
         print("⚙️  Preprocessing data...")
         X, y = self.preprocessor.fit_transform(self.df, self.target)
         
         input_dim = len(X[0])
         hidden_dim = 16 
         output_dim = self.preprocessor.output_dim
+        if batch_size is None:
+            batch_size = 32
+        if batch_size <= 0:
+            raise ValueError("batch_size must be a positive integer")
+
+
         
         print(f"🚀 Initializing Rust Core [In: {input_dim}, Out: {output_dim}]...")
         self.rust_model = _etna_rust.EtnaModel(input_dim, hidden_dim, output_dim, self.task_code)
         
         print("🔥 Training started...")
-        self.loss_history = self.rust_model.train(X, y, epochs, lr)
+        self.loss_history = self.rust_model.train(X, y, epochs, lr, batch_size)
+
         print("✅ Training complete!")
 
     def predict(self, data_path=None):

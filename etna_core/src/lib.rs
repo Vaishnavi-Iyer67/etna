@@ -6,16 +6,20 @@ mod model;
 mod layers;
 mod loss_function;
 mod optimizer;
-mod utils; 
+mod utils;
 
 use pyo3::prelude::*;
 use pyo3::types::PyList;
 use crate::model::SimpleNN;
 
-/// Helper: Convert Python list to Rust Vec
+/// Helper: Convert Python list to Rust Vec<Vec<f32>>
 fn pylist_to_vec2(pylist: &Bound<'_, PyList>) -> Vec<Vec<f32>> {
-    pylist.iter()
-        .map(|item| item.extract::<Vec<f32>>().expect("Expected list of floats"))
+    pylist
+        .iter()
+        .map(|item| {
+            item.extract::<Vec<f32>>()
+                .expect("Expected list of floats")
+        })
         .collect()
 }
 
@@ -28,20 +32,38 @@ struct EtnaModel {
 #[pymethods]
 impl EtnaModel {
     #[new]
-    fn new(input_dim: usize, hidden_dim: usize, output_dim: usize, task_type: usize) -> Self {
+    fn new(
+        input_dim: usize,
+        hidden_dim: usize,
+        output_dim: usize,
+        task_type: usize,
+    ) -> Self {
         EtnaModel {
             inner: SimpleNN::new(input_dim, hidden_dim, output_dim, task_type),
         }
     }
 
-    fn train(&mut self, x: &Bound<'_, PyList>, y: &Bound<'_, PyList>, epochs: usize, lr: f32) -> PyResult<Vec<f32>> {
+    // Expose batch_size to Python, default = None
+    #[pyo3(signature = (x, y, epochs, lr, batch_size=None))]
+    fn train(
+        &mut self,
+        x: &Bound<'_, PyList>,
+        y: &Bound<'_, PyList>,
+        epochs: usize,
+        lr: f32,
+        batch_size: Option<usize>,
+    ) -> PyResult<Vec<f32>> {
         let x_vec = pylist_to_vec2(x);
         let y_vec = pylist_to_vec2(y);
-        
-        // Capture the history returned by Rust
-        let history = self.inner.train(&x_vec, &y_vec, epochs, lr);
-        
-        // Return it to Python
+
+        let history = self.inner.train(
+            &x_vec,
+            &y_vec,
+            epochs,
+            lr,
+            batch_size,
+        );
+
         Ok(history)
     }
 
@@ -53,16 +75,20 @@ impl EtnaModel {
 
     fn save(&self, path: String) -> PyResult<()> {
         self.inner.save(&path).map_err(|e| {
-            pyo3::exceptions::PyIOError::new_err(format!("Failed to save model: {}", e))
-        })?;
-        Ok(())
+            pyo3::exceptions::PyIOError::new_err(
+                format!("Failed to save model: {}", e),
+            )
+        })
     }
 
     #[staticmethod]
     fn load(path: String) -> PyResult<Self> {
         let inner = SimpleNN::load(&path).map_err(|e| {
-            pyo3::exceptions::PyIOError::new_err(format!("Failed to load model: {}", e))
+            pyo3::exceptions::PyIOError::new_err(
+                format!("Failed to load model: {}", e),
+            )
         })?;
+
         Ok(EtnaModel { inner })
     }
 }
